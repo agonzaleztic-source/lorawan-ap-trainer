@@ -1,11 +1,15 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { CSS } from "./styles.js";
 import { DOMAINS, DOM_NAME, DOM_COLOR } from "./data/domains.js";
 import { QUESTIONS } from "./data/questions.js";
 import { CARDS } from "./data/cards.js";
 import { LESSONS } from "./data/lessons.js";
 import { T_DR_EU, T_MTYPE, T_CID, T_KEYS, T_TIMES, T_DOCS } from "./data/tables.js";
-import { timeOnAir, SENS, fmt, shuffle } from "./lib/radio.js";
+import { timeOnAir, SENS, fmt, shuffle, shuffleOptions, randSeed } from "./lib/radio.js";
+import {
+  emptyState, loadState, saveState, clearState,
+  scheduleCard, deckStatus, cardState, humanDelay, recordAnswer,
+} from "./lib/store.js";
 
 /* ============================================================
    PIEZAS REUTILIZABLES
@@ -71,29 +75,33 @@ function Block({ b }) {
   }
 }
 
-/* Preguntas de comprobación al final de cada lección. */
+/* Preguntas de comprobación al final de cada lección.
+   Las opciones se barajan una vez por montaje: al reabrir la lección el
+   orden cambia, así que no se puede memorizar la posición de la correcta. */
 function Check({ c, i, onAnswer }) {
   const [pick, setPick] = useState(null);
+  const [seed] = useState(randSeed);
+  const q = useMemo(() => shuffleOptions(c, seed), [c, seed]);
   const choose = (k) => {
     if (pick !== null) return;
     setPick(k);
-    onAnswer(k === c.a);
+    onAnswer(k === q.a);
   };
   return (
     <div style={{ marginBottom: 26 }}>
       <p style={{ fontSize: 15.5, fontWeight: 500, marginBottom: 12 }}>
-        <span className="mono" style={{ color: "var(--muted)", marginRight: 8 }}>{i + 1}.</span>{c.q}
+        <span className="mono" style={{ color: "var(--muted)", marginRight: 8 }}>{i + 1}.</span>{q.q}
       </p>
-      {c.opts.map((o, k) => {
+      {q.opts.map((o, k) => {
         let cls = "lw-opt";
-        if (pick !== null) { if (k === c.a) cls += " good"; else if (k === pick) cls += " bad"; }
+        if (pick !== null) { if (k === q.a) cls += " good"; else if (k === pick) cls += " bad"; }
         return (
           <button key={k} className={cls} disabled={pick !== null} onClick={() => choose(k)}>
             <span className="k">{"ABCD"[k]}</span><span>{o}</span>
           </button>
         );
       })}
-      {pick !== null && <div className="lw-exp" style={{ marginTop: 10 }}>{c.exp}</div>}
+      {pick !== null && <div className="lw-exp" style={{ marginTop: 10 }}>{q.exp}</div>}
     </div>
   );
 }
@@ -200,10 +208,18 @@ const PLAN = [
     x: "Lecciones de operación, más simulacros completos hasta sostener el 85 % de acierto. Las tarjetas son para los huecos que salgan." },
 ];
 
-function Dashboard({ stats, studied, go }) {
+function Dashboard({ stats, studied, cards, failed, runs, persists, onReset, go }) {
+  const [confirmReset, setConfirmReset] = useState(false);
   const total = Object.values(stats).reduce((s, v) => s + v.seen, 0);
   const right = Object.values(stats).reduce((s, v) => s + v.right, 0);
   const pct = total ? Math.round((right / total) * 100) : 0;
+  const nFails = QUESTIONS.filter((q) => failed[q.id]).length;
+  const mastered = CARDS.filter((c) => cardState(cards, c.f).box >= 4).length;
+  const dueToday = CARDS.filter((c) => cardState(cards, c.f).due <= Date.now()).length;
+  /* "Sostenido" significa varios intentos seguidos por encima del listón,
+     no una buena nota suelta. Se miran los tres últimos. */
+  const last3 = runs.slice(-3);
+  const sustained = last3.length === 3 && last3.every((r) => r.score >= 85);
   const weak = DOMAINS.map((d) => ({ ...d, s: stats[d.id] }))
     .filter((d) => d.s.seen >= 3)
     .sort((a, b) => a.s.right / a.s.seen - b.s.right / b.s.seen)[0];
@@ -264,6 +280,30 @@ function Dashboard({ stats, studied, go }) {
         })}
       </div>
 
+      <h3 style={{ fontSize: 16, marginBottom: 12 }}>Preparación para el examen</h3>
+      <div className="lw-card" style={{ marginBottom: 18 }}>
+        <div className="lw-kv">
+          <span>Tests completados</span>
+          <b>{runs.length === 0 ? "ninguno todavía" : `${runs.length} · últimos: ${last3.map((r) => `${r.score} %`).join(", ")}`}</b>
+        </div>
+        <div className="lw-kv">
+          <span>85 % sostenido en tres intentos</span>
+          <b style={{ color: sustained ? "var(--green)" : "var(--amber)" }}>{sustained ? "conseguido" : "todavía no"}</b>
+        </div>
+        <div className="lw-kv">
+          <span>Preguntas pendientes de acertar</span>
+          <b style={{ color: nFails ? "var(--amber)" : "var(--green)" }}>{nFails}</b>
+        </div>
+        <div className="lw-kv">
+          <span>Tarjetas asentadas</span>
+          <b>{mastered} de {CARDS.length}{dueToday ? ` · ${dueToday} tocan hoy` : ""}</b>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+          <button className="lw-btn" onClick={() => go("test")}>Ir al test</button>
+          {dueToday > 0 && <button className="lw-btn ghost" onClick={() => go("tarjetas")}>Repasar tarjetas</button>}
+        </div>
+      </div>
+
       <h3 style={{ fontSize: 16, marginBottom: 12 }}>Plan de cuatro semanas</h3>
       <div style={{ display: "grid", gap: 11, marginBottom: 22 }}>
         {PLAN.map((p) => (
@@ -287,10 +327,21 @@ function Dashboard({ stats, studied, go }) {
         <div className="lw-kv"><span>Fuente definitiva</span><b>TS001, RP002 y la Resource Library</b></div>
       </div>
 
-      <p className="lw-note">
+      <p className="lw-note" style={{ marginBottom: 14 }}>
         Material de apoyo elaborado a partir de documentación pública. No reproduce el banco oficial de preguntas.
-        El progreso se mantiene mientras la ventana esté abierta.
+        {persists
+          ? " Tu progreso se guarda en este dispositivo y sobrevive a cerrar la app."
+          : " Este navegador no permite guardar datos, así que el progreso se perderá al cerrar la pestaña."}
       </p>
+      {confirmReset ? (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="lw-note">Se borrará todo: lecciones, aciertos, tarjetas y fallos pendientes.</span>
+          <button className="lw-btn" onClick={() => { onReset(); setConfirmReset(false); }}>Borrar</button>
+          <button className="lw-btn ghost" onClick={() => setConfirmReset(false)}>Cancelar</button>
+        </div>
+      ) : (
+        <button className="lw-btn ghost" onClick={() => setConfirmReset(true)}>Reiniciar mi progreso</button>
+      )}
     </div>
   );
 }
@@ -298,27 +349,39 @@ function Dashboard({ stats, studied, go }) {
 /* ============================================================
    TARJETAS
    ============================================================ */
-function Flashcards() {
+function Flashcards({ cards, onGrade }) {
   const [dom, setDom] = useState("all");
-  const [i, setI] = useState(0);
   const [flip, setFlip] = useState(false);
-  const [known, setKnown] = useState([]);
+  const [queue, setQueue] = useState([]);
+  const [extra, setExtra] = useState(false); // repasar aunque no toque todavía
 
   const deck = useMemo(() => (dom === "all" ? CARDS : CARDS.filter((c) => c.dom === dom)), [dom]);
-  useEffect(() => { setI(0); setFlip(false); setKnown([]); }, [dom]);
+  const status = deckStatus(cards, deck);
 
-  const card = deck[i];
-  const next = (mark) => {
-    if (mark && card) setKnown((k) => (k.includes(card.f) ? k : [...k, card.f]));
+  /* La cola de la sesión se arma al entrar y al cambiar de filtro. No depende
+     de `cards`: si se rehiciera en cada respuesta, la tarjeta recién graduada
+     desaparecería a media sesión. */
+  useEffect(() => {
+    setQueue((extra ? deck : deckStatus(cards, deck).due).map((c) => c.f));
     setFlip(false);
-    setTimeout(() => setI((v) => (v + 1) % deck.length), 120);
+  }, [dom, extra]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const card = deck.find((c) => c.f === queue[0]);
+
+  const grade = (ok) => {
+    if (!card) return;
+    onGrade(card.f, ok);
+    setFlip(false);
+    // Fallar la devuelve al final de la cola: se vuelve a ver hoy, no dentro de tres días.
+    setTimeout(() => setQueue((q) => (ok ? q.slice(1) : [...q.slice(1), card.f])), 120);
   };
 
   return (
     <div>
       <h2 className="lw-h2">Tarjetas</h2>
       <p className="lw-lead">
-        Definiciones, valores y siglas que hay que tener automatizados. Toca la tarjeta para verla del otro lado.
+        Repaso espaciado: cada tarjeta que aciertas tarda más en volver y las que fallas reaparecen enseguida.
+        Toca la tarjeta para verla del otro lado.
       </p>
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 18 }}>
         <button className="lw-chip" aria-pressed={dom === "all"} onClick={() => setDom("all")}>Todas</button>
@@ -327,14 +390,14 @@ function Flashcards() {
         ))}
       </div>
 
-      {card && (
+      {card ? (
         <>
           <div className="lw-flip" style={{ marginBottom: 16 }}>
             <div className={`lw-flip-in${flip ? " on" : ""}`} onClick={() => setFlip((f) => !f)} role="button" tabIndex={0}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFlip((f) => !f); } }}>
               <div className="lw-face">
                 <span className="mono" style={{ fontSize: 11.5, color: DOM_COLOR[card.dom], marginBottom: 12 }}>
-                  {DOM_NAME[card.dom]}
+                  {DOM_NAME[card.dom]} · caja {cardState(cards, card.f).box} de 5
                 </span>
                 <h3 style={{ fontSize: 27, lineHeight: 1.2 }}>{card.f}</h3>
                 <span className="lw-note" style={{ marginTop: 16 }}>Toca para ver la respuesta</span>
@@ -345,16 +408,28 @@ function Flashcards() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button className="lw-btn ghost" onClick={() => next(false)}>Repasar de nuevo</button>
-            <button className="lw-btn primary" onClick={() => next(true)}>La sé</button>
+            <button className="lw-btn ghost" onClick={() => grade(false)}>No la sabía</button>
+            <button className="lw-btn primary" onClick={() => grade(true)}>La sé</button>
             <span className="lw-note mono" style={{ marginLeft: "auto" }}>
-              {i + 1} / {deck.length} · dominadas {known.length}
+              quedan {queue.length} · dominadas {status.mastered} de {deck.length}
             </span>
           </div>
           <div className="lw-bar" style={{ marginTop: 14 }}>
-            <i style={{ width: `${(known.length / deck.length) * 100}%` }} />
+            <i style={{ width: `${(status.mastered / deck.length) * 100}%` }} />
           </div>
         </>
+      ) : (
+        <div className="lw-card">
+          <h3 style={{ fontSize: 18, marginBottom: 10 }}>Repaso al día</h3>
+          <p style={{ fontSize: 14, color: "var(--muted)", maxWidth: "60ch", marginBottom: 16 }}>
+            No queda ninguna tarjeta pendiente en esta selección
+            {status.nextDue ? `. La siguiente vuelve ${humanDelay(status.nextDue - Date.now())}` : ""}.
+            Has asentado {status.mastered} de {deck.length}.
+          </p>
+          <button className="lw-btn" onClick={() => setExtra((v) => !v)}>
+            {extra ? "Volver al repaso programado" : "Repasar el mazo entero de todos modos"}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -363,7 +438,7 @@ function Flashcards() {
 /* ============================================================
    TEST
    ============================================================ */
-function Quiz({ record }) {
+function Quiz({ record, failed, onAnswer, onRun }) {
   const [phase, setPhase] = useState("setup");
   const [doms, setDoms] = useState(DOMAINS.map((d) => d.id));
   const [len, setLen] = useState(15);
@@ -373,6 +448,7 @@ function Quiz({ record }) {
   const [pick, setPick] = useState(null);
   const [log, setLog] = useState([]);
   const [left, setLeft] = useState(0);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (phase !== "run" || !mock) return;
@@ -381,23 +457,51 @@ function Quiz({ record }) {
     return () => clearTimeout(t);
   }, [phase, left, mock]);
 
+  /* El intento se archiva una sola vez al terminar: el criterio de "85 %
+     sostenido" necesita historial, no la nota del último test. */
+  useEffect(() => {
+    if (phase !== "done" || saved || !log.length) return;
+    const hits = log.filter((l) => l.idx === l.q.a).length;
+    setSaved(true);
+    onRun({ score: Math.round((hits / log.length) * 100), n: log.length, mock });
+  }, [phase, saved, log, mock, onRun]);
+
   const toggle = (id) =>
     setDoms((d) => (d.includes(id) ? (d.length > 1 ? d.filter((x) => x !== id) : d) : [...d, id]));
 
-  const start = (isMock) => {
-    const pool = isMock ? QUESTIONS : QUESTIONS.filter((q) => doms.includes(q.dom));
-    const n = isMock ? pool.length : Math.min(len, pool.length);
-    setSet(shuffle(pool, Date.now() % 100000).slice(0, n));
+  /* Selección de preguntas.
+     - "mock": el banco entero, contrarreloj.
+     - "fails": solo las que quedaron pendientes de acertar.
+     - "custom": la selección del alumno, dando prioridad a sus fallos y
+       rellenando con el resto. Reordenado al final para que los fallos no
+       salgan todos seguidos al principio. */
+  const buildSet = (mode) => {
+    if (mode === "mock") return shuffle(QUESTIONS, randSeed());
+    if (mode === "fails") return shuffle(QUESTIONS.filter((q) => failed[q.id]), randSeed());
+    const sel = QUESTIONS.filter((q) => doms.includes(q.dom));
+    const bad = shuffle(sel.filter((q) => failed[q.id]), randSeed());
+    const rest = shuffle(sel.filter((q) => !failed[q.id]), randSeed());
+    return shuffle([...bad, ...rest].slice(0, Math.min(len, sel.length)), randSeed());
+  };
+
+  const start = (mode) => {
+    const chosen = buildSet(mode);
+    const isMock = mode === "mock";
+    // Las opciones se barajan en cada intento: la posición de la correcta
+    // no debe ser una pista aprendible.
+    setSet(chosen.map((q) => shuffleOptions(q, randSeed())));
     setMock(isMock);
-    setLeft(isMock ? Math.round((90 * 60 * n) / 100) : 0);
-    setI(0); setPick(null); setLog([]); setPhase("run");
+    setLeft(isMock ? Math.round((90 * 60 * chosen.length) / 100) : 0);
+    setI(0); setPick(null); setLog([]); setSaved(false); setPhase("run");
   };
 
   const answer = (idx) => {
     if (pick !== null) return;
     const q = set[i];
+    const ok = idx === q.a;
     setPick(idx);
-    record(q.dom, idx === q.a);
+    record(q.dom, ok);
+    onAnswer(q.id, ok);
     setLog((l) => [...l, { q, idx }]);
   };
   const advance = () => {
@@ -407,11 +511,14 @@ function Quiz({ record }) {
 
   if (phase === "setup") {
     const avail = QUESTIONS.filter((q) => doms.includes(q.dom)).length;
+    const nFails = QUESTIONS.filter((q) => failed[q.id]).length;
+    const failsHere = QUESTIONS.filter((q) => failed[q.id] && doms.includes(q.dom)).length;
     return (
       <div>
         <h2 className="lw-h2">Test</h2>
         <p className="lw-lead">
           Elige dominios y longitud, o lanza un simulacro con todo el banco y reloj proporcional al examen real.
+          Las opciones se barajan en cada intento.
         </p>
         <div className="lw-card" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 15, marginBottom: 12 }}>Dominios</h3>
@@ -427,9 +534,24 @@ function Quiz({ record }) {
             ))}
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button className="lw-btn primary" onClick={() => start(false)}>Empezar test</button>
-            <span className="lw-note">{Math.min(len, avail)} preguntas de {avail} disponibles en tu selección</span>
+            <button className="lw-btn primary" onClick={() => start("custom")}>Empezar test</button>
+            <span className="lw-note">
+              {Math.min(len, avail)} preguntas de {avail} disponibles en tu selección
+              {failsHere > 0 ? ` · entran primero tus ${failsHere} pendientes` : ""}
+            </span>
           </div>
+        </div>
+
+        <div className="lw-card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 15, marginBottom: 8 }}>Repaso de fallos</h3>
+          <p className="lw-note" style={{ marginBottom: 14, maxWidth: "62ch" }}>
+            {nFails > 0
+              ? `Tienes ${nFails} preguntas pendientes de acertar. Una pregunta sale de la lista cuando la aciertas más tarde, no cuando la lees.`
+              : "Aquí se acumularán las preguntas que falles. Salen de la lista cuando las aciertas en un intento posterior."}
+          </p>
+          <button className="lw-btn" disabled={nFails === 0} onClick={() => start("fails")}>
+            Repasar mis {nFails} fallos
+          </button>
         </div>
         <div className="lw-card">
           <h3 style={{ fontSize: 15, marginBottom: 8 }}>Simulacro cronometrado</h3>
@@ -437,7 +559,7 @@ function Quiz({ record }) {
             Las {QUESTIONS.length} preguntas del banco al ritmo del examen oficial: 54 segundos por pregunta,
             sin explicaciones hasta el final.
           </p>
-          <button className="lw-btn" onClick={() => start(true)}>Lanzar simulacro</button>
+          <button className="lw-btn" onClick={() => start("mock")}>Lanzar simulacro</button>
         </div>
       </div>
     );
@@ -678,16 +800,47 @@ const TABS = [
   { id: "referencia", n: "Referencia" },
 ];
 
+const DOM_IDS = DOMAINS.map((d) => d.id);
+
 export default function App() {
   const [tab, setTab] = useState("panel");
-  const [stats, setStats] = useState(
-    Object.fromEntries(DOMAINS.map((d) => [d.id, { seen: 0, right: 0 }]))
-  );
-  const [studied, setStudied] = useState([]);
+  /* El progreso se lee del almacenamiento del dispositivo en el primer render
+     y se reescribe en cada cambio. Si el navegador no deja guardar (modo
+     privado, cuota agotada), `persists` queda a false y se avisa en el panel
+     en lugar de fingir que el progreso se conserva. */
+  const [state, setState] = useState(() => loadState(DOM_IDS));
+  const [persists, setPersists] = useState(true);
 
-  const record = (dom, ok) =>
-    setStats((s) => ({ ...s, [dom]: { seen: s[dom].seen + 1, right: s[dom].right + (ok ? 1 : 0) } }));
-  const markStudied = (id) => setStudied((v) => (v.includes(id) ? v : [...v, id]));
+  useEffect(() => { setPersists(saveState(state)); }, [state]);
+
+  const { stats, studied, cards, failed, runs } = state;
+
+  const record = useCallback((dom, ok) => setState((s) => ({
+    ...s,
+    stats: { ...s.stats, [dom]: { seen: s.stats[dom].seen + 1, right: s.stats[dom].right + (ok ? 1 : 0) } },
+  })), []);
+
+  const markStudied = useCallback((id) => setState((s) => (
+    s.studied.includes(id) ? s : { ...s, studied: [...s.studied, id] }
+  )), []);
+
+  const gradeCard = useCallback((front, ok) => setState((s) => ({
+    ...s, cards: scheduleCard(s.cards, front, ok),
+  })), []);
+
+  const noteAnswer = useCallback((id, ok) => setState((s) => ({
+    ...s, failed: recordAnswer(s.failed, id, ok),
+  })), []);
+
+  // Solo se conservan los treinta últimos intentos: basta para ver la tendencia.
+  const noteRun = useCallback((run) => setState((s) => ({
+    ...s, runs: [...s.runs, { ...run, at: Date.now() }].slice(-30),
+  })), []);
+
+  const reset = useCallback(() => {
+    clearState();
+    setState(emptyState(DOM_IDS));
+  }, []);
 
   return (
     <div className="lw">
@@ -721,10 +874,13 @@ export default function App() {
       </nav>
 
       <main className="lw-wrap" style={{ paddingTop: 28 }}>
-        {tab === "panel" && <Dashboard stats={stats} studied={studied} go={setTab} />}
+        {tab === "panel" && (
+          <Dashboard stats={stats} studied={studied} cards={cards} failed={failed}
+            runs={runs} persists={persists} onReset={reset} go={setTab} />
+        )}
         {tab === "teoria" && <Theory studied={studied} markStudied={markStudied} record={record} />}
-        {tab === "tarjetas" && <Flashcards />}
-        {tab === "test" && <Quiz record={record} />}
+        {tab === "tarjetas" && <Flashcards cards={cards} onGrade={gradeCard} />}
+        {tab === "test" && <Quiz record={record} failed={failed} onAnswer={noteAnswer} onRun={noteRun} />}
         {tab === "calculadoras" && <Tools />}
         {tab === "referencia" && <Reference />}
       </main>

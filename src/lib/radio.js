@@ -23,3 +23,13 @@ export function shuffle(arr, seed) {
   }
   return a;
 }
+
+export const randSeed = () => Math.floor(Math.random() * 2147483646) + 1;
+
+/* Baraja las opciones de una pregunta y recalcula el indice de la correcta.
+   Se aplica en cada intento: si la correcta cae siempre en la misma posicion,
+   el alumno aprende la posicion en lugar de la materia. */
+export function shuffleOptions(q, seed) {
+  const order = shuffle(q.opts.map((_, i) => i), seed);
+  return { ...q, opts: order.map((i) => q.opts[i]), a: order.indexOf(q.a) };
+}

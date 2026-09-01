@@ -1,13 +1,25 @@
 # LoRaWAN Accredited Professional — Entrenador
 
 Curso y entrenador para el examen de acreditación de la LoRa Alliance. Incluye 24 lecciones
-de teoría explicada, 146 preguntas con corrección razonada, 64 tarjetas de repaso, simulacro
+de teoría explicada, 146 preguntas con corrección razonada (74 en el banco de tests y 72 de
+comprobación al final de las lecciones), 61 tarjetas de repaso espaciado, simulacro
 cronometrado y calculadoras de radio (tiempo en aire, ciclo de trabajo y presupuesto de enlace).
 
-El temario cubre los ocho dominios del examen en unas tres horas y media de lectura, pensado
-para estudiarse en orden: cada bloque se apoya en el anterior.
+El temario cubre los ocho dominios del examen en unas tres horas y media de estudio, pensado
+para leerse en orden: cada bloque se apoya en el anterior.
 
 Funciona en el navegador, se instala como app en el móvil y sigue funcionando sin conexión.
+
+## Cómo entrena
+
+- **Las opciones se barajan en cada intento.** La posición de la respuesta correcta nunca es
+  una pista: se aprende la materia, no la letra.
+- **El progreso se guarda en el dispositivo.** Lecciones estudiadas, acierto por dominio,
+  historial de tests y estado de las tarjetas sobreviven a cerrar la app.
+- **Las tarjetas usan repaso espaciado** (Leitner de cinco cajas): lo que aciertas tarda más
+  en volver, lo que fallas reaparece en la misma sesión.
+- **Los fallos se reinyectan.** Una pregunta fallada entra primero en los siguientes tests y
+  solo sale de la lista cuando la aciertas más tarde.
 
 ## Requisitos
 
@@ -75,7 +87,8 @@ caché para estudiar en el metro o en zonas sin cobertura.
 │   ├── main.jsx                arranque de React y registro del service worker
 │   ├── App.jsx                 componentes de la interfaz
 │   ├── styles.js               hoja de estilos completa
-│   ├── lib/radio.js            tiempo en aire, sensibilidad y utilidades
+│   ├── lib/radio.js            tiempo en aire, sensibilidad y barajado de opciones
+│   ├── lib/store.js            progreso guardado y repaso espaciado
 │   └── data
 │       ├── domains.js          los ocho dominios temáticos
 │       ├── lessons.js          las 24 lecciones de teoría
