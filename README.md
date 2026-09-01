@@ -10,6 +10,8 @@ para leerse en orden: cada bloque se apoya en el anterior.
 
 Funciona en el navegador, se instala como app en el móvil y sigue funcionando sin conexión.
 
+**App publicada:** https://agonzaleztic-source.github.io/lorawan-ap-trainer/
+
 ## Cómo entrena
 
 - **Las opciones se barajan en cada intento.** La posición de la respuesta correcta nunca es
@@ -21,13 +23,19 @@ Funciona en el navegador, se instala como app en el móvil y sigue funcionando s
 - **Los fallos se reinyectan.** Una pregunta fallada entra primero en los siguientes tests y
   solo sale de la lista cuando la aciertas más tarde.
 
-## Requisitos
+## Instalarla en el móvil
 
-- Node.js 20 o superior ([nodejs.org](https://nodejs.org))
-- Git
-- Visual Studio Code
+Abre https://agonzaleztic-source.github.io/lorawan-ap-trainer/ en el móvil:
+
+- **Android (Chrome)**: menú ⋮ → *Añadir a pantalla de inicio*.
+- **iOS (Safari)**: botón compartir → *Añadir a pantalla de inicio*.
+
+Se abre a pantalla completa y, tras la primera visita, el service worker guarda todo en
+caché para estudiar en el metro o en zonas sin cobertura.
 
 ## Arrancar en local
+
+Requiere Node.js 20 o superior ([nodejs.org](https://nodejs.org)).
 
 ```bash
 npm install
@@ -42,41 +50,6 @@ Para ver la versión de producción tal cual quedará publicada:
 npm run build
 npm run preview
 ```
-
-## Publicar en GitHub Pages
-
-1. Crea un repositorio vacío en GitHub, **público** y sin README (lo trae este proyecto).
-
-2. Desde la carpeta del proyecto:
-
-```bash
-git init
-git add .
-git commit -m "Entrenador LoRaWAN Accredited Professional"
-git branch -M main
-git remote add origin https://github.com/TU-USUARIO/TU-REPO.git
-git push -u origin main
-```
-
-3. En GitHub, ve a **Settings → Pages** y en *Source* elige **GitHub Actions**.
-
-4. Vuelve a la pestaña **Actions**. El workflow `Publicar en GitHub Pages` se ejecuta solo
-   con cada push a `main`. Al terminar, la app queda en:
-
-   `https://TU-USUARIO.github.io/TU-REPO/`
-
-No hace falta tocar `vite.config.js`: la ruta base se calcula a partir del nombre del
-repositorio durante el despliegue.
-
-## Instalarla en el móvil
-
-Abre la URL de GitHub Pages en el móvil:
-
-- **Android (Chrome)**: menú ⋮ → *Añadir a pantalla de inicio*.
-- **iOS (Safari)**: botón compartir → *Añadir a pantalla de inicio*.
-
-Se abre a pantalla completa y, tras la primera visita, el service worker guarda todo en
-caché para estudiar en el metro o en zonas sin cobertura.
 
 ## Estructura
 
@@ -140,13 +113,7 @@ En `src/data/questions.js`. El campo `a` es el índice de la opción correcta em
 ```
 
 Los `dom` válidos son: `phy`, `arq`, `cls`, `sec`, `mac`, `cmd`, `reg`, `ops`.
-Guarda, comprueba en local con `npm run dev`, y publica:
-
-```bash
-git add . && git commit -m "Nuevas preguntas de comandos MAC" && git push
-```
-
-En dos o tres minutos la versión actualizada está en tu móvil.
+Guarda, comprueba en local con `npm run dev` y publica con un push a `main`.
 
 ## Aviso sobre el contenido
 
@@ -154,3 +121,17 @@ El material se ha elaborado a partir de la documentación pública de la especif
 LoRaWAN. No procede del banco de preguntas oficial ni lo reproduce. La fuente definitiva
 para el examen son los documentos de la LoRa Alliance: TS001 (Link Layer), RP002 (Regional
 Parameters) y el resto de la Resource Library.
+
+## Desplegar tu propia copia
+
+El despliegue está automatizado: `.github/workflows/deploy.yml` compila y publica en GitHub
+Pages con cada push a `main`, y `vite.config.js` calcula la ruta base a partir del nombre del
+repositorio, así que no hay nada que configurar a mano.
+
+Haz un fork del repositorio, entra en **Settings → Pages** y elige **GitHub Actions** como
+*Source*. El workflow se ejecuta con el primer push y deja la app publicada en
+`https://TU-USUARIO.github.io/NOMBRE-DEL-REPO/`.
+
+## Licencia
+
+MIT — ver [LICENSE](LICENSE).
