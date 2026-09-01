@@ -7,6 +7,10 @@
 
 const KEY = "lorawan-ap-trainer/v1";
 
+/* Cajas del sistema Leitner y tope del historial de tests que se conserva. */
+export const BOXES = 5;
+const RUNS_KEPT = 30;
+
 /* Estado inicial. `doms` son los ids de dominio, que se pasan desde fuera
    para no acoplar esta capa a los datos del temario. */
 export function emptyState(doms) {
@@ -20,22 +24,95 @@ export function emptyState(doms) {
   };
 }
 
+/* ---------- Saneado de lo que vuelve del almacen ----------
+
+   localStorage no es una fuente de confianza: lo edita cualquiera desde la
+   consola del navegador, y en GitHub Pages el origen es compartido por todos
+   los proyectos publicados bajo el mismo usuario, asi que otra pagina del
+   mismo dominio escribe en la misma caja. Nada de esto permite ejecutar
+   codigo —React escapa todo lo que pinta y aqui no se interpola HTML— pero
+   un objeto con la forma equivocada si rompe la app o falsea el progreso.
+
+   Por eso el estado se reconstruye campo a campo con el tipo esperado en vez
+   de volcar el JSON con un spread, que copiaba tal cual cualquier clave que
+   hubiera en el almacen. */
+
+const isPlain = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
+
+/* Una clave "__proto__" que venga del almacen no crea una propiedad normal:
+   sustituye el prototipo del objeto destino. No contamina Object.prototype
+   —JSON.parse la deja como propiedad propia—, pero si envenena este mapa:
+   a partir de ahi cualquier tarjeta no vista heredaria esos valores en vez
+   del {box:0, due:0} por defecto, y el mazo entero saldria mal contado. */
+const SEGURA = (k) => k !== "__proto__" && k !== "constructor" && k !== "prototype";
+
+const count = (x) =>
+  typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.floor(x) : 0;
+
+function cleanStats(base, saved) {
+  const out = { ...base };
+  if (!isPlain(saved)) return out;
+  // Solo dominios que existen hoy: los que se hayan retirado del temario caen.
+  for (const d of Object.keys(base)) {
+    const s = saved[d];
+    if (isPlain(s)) out[d] = { seen: count(s.seen), right: count(s.right) };
+  }
+  return out;
+}
+
+function cleanCards(saved) {
+  const out = {};
+  if (!isPlain(saved)) return out;
+  for (const [front, c] of Object.entries(saved)) {
+    if (!SEGURA(front) || !isPlain(c)) continue;
+    const box = Math.min(count(c.box), BOXES);
+    const due = typeof c.due === "number" && Number.isFinite(c.due) ? c.due : 0;
+    out[front] = { box, due };
+  }
+  return out;
+}
+
+function cleanFailed(saved) {
+  const out = {};
+  if (!isPlain(saved)) return out;
+  for (const [id, n] of Object.entries(saved)) {
+    if (!SEGURA(id)) continue;
+    const v = count(n);
+    if (v > 0) out[id] = v;
+  }
+  return out;
+}
+
+function cleanRuns(saved) {
+  if (!Array.isArray(saved)) return [];
+  return saved
+    .filter(isPlain)
+    .slice(-RUNS_KEPT)
+    .map((r) => ({
+      at: count(r.at),
+      score: count(r.score),
+      n: count(r.n),
+      mock: r.mock === true,
+    }));
+}
+
 export function loadState(doms) {
   const base = emptyState(doms);
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return base;
     const saved = JSON.parse(raw);
-    if (!saved || saved.v !== 1) return base;
+    if (!isPlain(saved) || saved.v !== 1) return base;
     return {
-      ...base,
-      ...saved,
+      v: 1,
       // Si el temario gana dominios nuevos, los que falten arrancan a cero.
-      stats: { ...base.stats, ...(saved.stats || {}) },
-      cards: saved.cards || {},
-      failed: saved.failed || {},
-      runs: Array.isArray(saved.runs) ? saved.runs : [],
-      studied: Array.isArray(saved.studied) ? saved.studied : [],
+      stats: cleanStats(base.stats, saved.stats),
+      studied: Array.isArray(saved.studied)
+        ? saved.studied.filter((x) => typeof x === "string")
+        : [],
+      cards: cleanCards(saved.cards),
+      failed: cleanFailed(saved.failed),
+      runs: cleanRuns(saved.runs),
     };
   } catch {
     return base;
@@ -67,7 +144,6 @@ export function clearState() {
 
 const MIN = 60 * 1000;
 const DAY = 24 * 60 * MIN;
-export const BOXES = 5;
 const INTERVAL = { 1: 10 * MIN, 2: DAY, 3: 3 * DAY, 4: 7 * DAY, 5: 21 * DAY };
 
 /* Una tarjeta nunca vista esta pendiente desde el principio. */
