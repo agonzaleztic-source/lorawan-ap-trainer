@@ -1,6 +1,37 @@
-/* Estilos globales de la app. */
+/* Estilos globales de la app.
+
+   Las tipografias se sirven desde el propio dominio (public/fonts, subconjunto
+   latino, 97 KB). Antes se pedian a fonts.googleapis.com con un @import, lo que
+   revelaba la IP de cada visitante a un tercero en cada carga y dejaba la app
+   sin tipografia justo en el escenario que promete cubrir: sin conexion. */
+
+const F = `${import.meta.env.BASE_URL}fonts`;
+
+/* Subconjunto latino: cubre el espanol completo. Lo que quede fuera cae al
+   tipo del sistema, igual que hacia antes con los subconjuntos de Google. */
+const LATIN = "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD";
+
 export const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@font-face {
+  font-family:'IBM Plex Sans'; font-style:normal; font-weight:400 600;
+  font-display:swap; unicode-range:${LATIN};
+  src:url('${F}/ibm-plex-sans-var.woff2') format('woff2');
+}
+@font-face {
+  font-family:'Space Grotesk'; font-style:normal; font-weight:300 700;
+  font-display:swap; unicode-range:${LATIN};
+  src:url('${F}/space-grotesk-var.woff2') format('woff2');
+}
+@font-face {
+  font-family:'IBM Plex Mono'; font-style:normal; font-weight:400;
+  font-display:swap; unicode-range:${LATIN};
+  src:url('${F}/ibm-plex-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family:'IBM Plex Mono'; font-style:normal; font-weight:500;
+  font-display:swap; unicode-range:${LATIN};
+  src:url('${F}/ibm-plex-mono-500.woff2') format('woff2');
+}
 
 .lw {
   --bg:#0A1420; --panel:#10202F; --panel2:#16293B; --line:#23394F;
