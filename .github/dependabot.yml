@@ -1,0 +1,20 @@
+# Sin esto, un aviso de seguridad en una dependencia se queda esperando a que
+# alguien lo mire. Con esto llega como pull request.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Un unico PR por tanda: aqui las dependencias de desarrollo son casi
+      # todo, y separarlas solo genera ruido.
+      dev:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
