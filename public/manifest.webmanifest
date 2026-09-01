@@ -1,0 +1,17 @@
+{
+  "name": "LoRaWAN Accredited Professional — Entrenador",
+  "short_name": "LoRaWAN AP",
+  "description": "Temario, tarjetas, tests y calculadoras para el examen de la LoRa Alliance.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0A1420",
+  "theme_color": "#0A1420",
+  "lang": "es",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
