@@ -9,6 +9,8 @@ El temario cubre los ocho dominios del examen en unas tres horas y media de estu
 para leerse en orden: cada bloque se apoya en el anterior.
 
 Funciona en el navegador, se instala como app en el móvil y sigue funcionando sin conexión.
+No tiene servidor ni cuentas, no recoge ningún dato y no hace una sola petición a terceros:
+el progreso se queda en el navegador de quien estudia.
 
 **App publicada:** https://agonzaleztic-source.github.io/lorawan-ap-trainer/
 
@@ -35,7 +37,7 @@ caché para estudiar en el metro o en zonas sin cobertura.
 
 ## Arrancar en local
 
-Requiere Node.js 20 o superior ([nodejs.org](https://nodejs.org)).
+Requiere Node.js 20.19 o superior ([nodejs.org](https://nodejs.org)).
 
 ```bash
 npm install
@@ -51,6 +53,22 @@ npm run build
 npm run preview
 ```
 
+## Comprobaciones
+
+```bash
+npm test     # 32 pruebas sobre los cálculos de radio y el motor de repaso
+npm run audit
+```
+
+Las pruebas cubren lo que no se puede verificar a ojo: los tiempos en aire
+contra los valores de referencia de Semtech (SF7/125 kHz/13 B = 46,3 ms;
+SF12 = 1,155 s), el reparto uniforme de la respuesta correcta entre las cuatro
+posiciones, la progresión de cajas de Leitner y el saneado de lo que vuelve de
+`localStorage`. Se ejecutan, junto con la auditoría de dependencias, en cada
+push a `main` antes de publicar.
+
+Sobre el modelo de amenaza, las medidas y sus límites: [SECURITY.md](SECURITY.md).
+
 ## Estructura
 
 ```
@@ -60,8 +78,10 @@ npm run preview
 │   ├── main.jsx                arranque de React y registro del service worker
 │   ├── App.jsx                 componentes de la interfaz
 │   ├── styles.js               hoja de estilos completa
+│   ├── sw.js                   caché para uso sin conexión
 │   ├── lib/radio.js            tiempo en aire, sensibilidad y barajado de opciones
 │   ├── lib/store.js            progreso guardado y repaso espaciado
+│   ├── lib/*.test.js           pruebas de ambos módulos
 │   └── data
 │       ├── domains.js          los ocho dominios temáticos
 │       ├── lessons.js          las 24 lecciones de teoría
@@ -70,9 +90,12 @@ npm run preview
 │       └── tables.js           tablas de referencia rápida
 ├── public
 │   ├── manifest.webmanifest    permite instalarla como app
-│   ├── sw.js                   caché para uso sin conexión
+│   ├── fonts/                  tipografías autoalojadas, subconjunto latino
 │   └── icon-*.png / icon.svg   iconos
-└── .github/workflows/deploy.yml  publicación automática
+├── SECURITY.md                 modelo de amenaza y medidas
+└── .github
+    ├── workflows/deploy.yml    pruebas, auditoría y publicación
+    └── dependabot.yml          actualización de dependencias y acciones
 ```
 
 El contenido de estudio está separado de la interfaz: todo vive en `src/data/`, así que puedes
